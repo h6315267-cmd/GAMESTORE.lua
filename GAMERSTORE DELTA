@@ -1,0 +1,50 @@
+-- DELTA HUB - STEAL AN EGG - SECRET KE ATAS
+-- Common, Uncommon, Rare, Epic, Legendary, Mythic = SKIP
+-- Cuma Secret, Eternal, Divine yang ditandain
+
+local TargetRarity = {
+    ["secret"] = Color3.fromRGB(255, 0, 0),      -- Merah buat Secret
+    ["eternal"] = Color3.fromRGB(168, 85, 247),  -- Ungu buat Eternal
+    ["divine"] = Color3.fromRGB(255, 215, 0),    -- Emas buat Divine
+}
+
+local function CekEggSecretKeAtas()
+    for _, v in pairs(workspace:GetDescendants()) do
+        if not v:IsA("BasePart") then continue end
+        local NamaLower = v.Name:lower()
+
+        for rarity, warna in pairs(TargetRarity) do
+            if string.find(NamaLower, rarity) and not v:FindFirstChild("DeltaEggESP") then
+                print("🥚🔥 KETEMU " .. string.upper(rarity) .. ": " .. v.Name)
+
+                local HL = Instance.new("Highlight")
+                HL.Name = "DeltaEggESP"
+                HL.FillColor = warna
+                HL.OutlineColor = Color3.fromRGB(255, 255, 255)
+                HL.Parent = v
+
+                local Billboard = Instance.new("BillboardGui")
+                Billboard.Size = UDim2.new(0, 170, 0, 40)
+                Billboard.AlwaysOnTop = true
+                Billboard.Parent = v
+                local Label = Instance.new("TextLabel")
+                Label.Size = UDim2.new(1, 0, 1, 0)
+                Label.BackgroundTransparency = 1
+                Label.Text = "🥚 " .. string.upper(rarity) .. " EGG!"
+                Label.TextColor3 = warna
+                Label.TextScaled = true
+                Label.Font = Enum.Font.GothamBold
+                Label.Parent = Billboard
+            end
+        end
+    end
+end
+
+spawn(function()
+    while true do
+        task.wait(2)
+        pcall(CekEggSecretKeAtas)
+    end
+end)
+
+print("✅ Filter ON! Cuma Secret + Eternal + Divine yang ditandain")
