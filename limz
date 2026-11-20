@@ -1,0 +1,792 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+local player = Players.LocalPlayer
+if not player then
+	Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+	player = Players.LocalPlayer
+end
+
+local function getSafeGuiParent()
+	local ok, result = pcall(function()
+		local testFolder = Instance.new("Folder")
+		testFolder.Name = "LimzxTest"
+		testFolder.Parent = CoreGui
+		testFolder:Destroy()
+		return CoreGui
+	end)
+	if ok and result then
+		return result
+	end
+	return player:WaitForChild("PlayerGui")
+end
+
+local parentGui = getSafeGuiParent()
+
+local existingGui = parentGui:FindFirstChild("LimzxHubUI")
+if existingGui then
+	existingGui:Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "LimzxHubUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function()
+	ScreenGui.Parent = parentGui
+end)
+if not ScreenGui.Parent then
+	ScreenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+-- ==========================================
+-- HELPER DRAG + CLAMP AGAR TIDAK KELUAR LAYAR
+-- ==========================================
+local function getViewportSize()
+	local cam = workspace.CurrentCamera
+	return cam and cam.ViewportSize or Vector2.new(800, 450)
+end
+
+local function clampFrameToScreen(frame)
+	local vp = getViewportSize()
+	local absSize = frame.AbsoluteSize
+	local absPos = frame.AbsolutePosition
+
+	local maxX = math.max(0, vp.X - absSize.X)
+	local maxY = math.max(0, vp.Y - absSize.Y)
+
+	local clampedX = math.clamp(absPos.X, 0, maxX)
+	local clampedY = math.clamp(absPos.Y, 0, maxY)
+
+	frame.Position = UDim2.new(0, clampedX, 0, clampedY)
+end
+
+local function makeDraggable(frame, dragHandle)
+	dragHandle = dragHandle or frame
+	local dragging = false
+	local dragInput, dragStart, startPos
+
+	dragHandle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = frame.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+					clampFrameToScreen(frame)
+				end
+			end)
+		end
+	end)
+
+	dragHandle.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			local vp = getViewportSize()
+			local absSize = frame.AbsoluteSize
+
+			local newX = math.clamp(startPos.X.Offset + delta.X, 0, math.max(0, vp.X - absSize.X))
+			local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, math.max(0, vp.Y - absSize.Y))
+
+			frame.Position = UDim2.new(0, newX, 0, newY)
+		end
+	end)
+end
+
+-- ==========================================
+-- 1. FRAME UTAMA LIMZX HUB (RESPONSIF)
+-- ==========================================
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 480, 0, 310)
+MainFrame.Position = UDim2.new(0, 40, 0, 40)
+MainFrame.BackgroundColor3 = Color3.fromRGB(14, 12, 24)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Active = true
+MainFrame.ZIndex = 1
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(190, 75, 255)
+MainStroke.Thickness = 2
+MainStroke.Parent = MainFrame
+
+-- ==========================================
+-- BACKGROUND GOJO PEGANG PEDANG (BERGERAK)
+-- ==========================================
+local GOJO_SWORD_IMAGE_ID = "rbxassetid://16892837492"
+
+local GojoBgContainer = Instance.new("Frame")
+GojoBgContainer.Name = "GojoBgContainer"
+GojoBgContainer.Size = UDim2.new(1, 0, 1, 0)
+GojoBgContainer.BackgroundTransparency = 1
+GojoBgContainer.ZIndex = 1
+GojoBgContainer.Parent = MainFrame
+
+local GojoSwordBg = Instance.new("ImageLabel")
+GojoSwordBg.Name = "GojoSwordBg"
+GojoSwordBg.Size = UDim2.new(1.18, 0, 1.18, 0)
+GojoSwordBg.Position = UDim2.new(-0.09, 0, -0.09, 0)
+GojoSwordBg.BackgroundTransparency = 1
+GojoSwordBg.Image = GOJO_SWORD_IMAGE_ID
+GojoSwordBg.ImageTransparency = 0.52
+GojoSwordBg.ScaleType = Enum.ScaleType.Crop
+GojoSwordBg.ZIndex = 1
+GojoSwordBg.Parent = GojoBgContainer
+
+local GojoOverlay = Instance.new("Frame")
+GojoOverlay.Name = "GojoOverlay"
+GojoOverlay.Size = UDim2.new(1, 0, 1, 0)
+GojoOverlay.BackgroundColor3 = Color3.fromRGB(14, 10, 26)
+GojoOverlay.BackgroundTransparency = 0.42
+GojoOverlay.BorderSizePixel = 0
+GojoOverlay.ZIndex = 2
+GojoOverlay.Parent = MainFrame
+
+local GojoGradient = Instance.new("UIGradient")
+GojoGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 10, 22)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(45, 16, 72)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 10, 22))
+})
+GojoGradient.Rotation = 35
+GojoGradient.Parent = GojoOverlay
+
+local SwordSlashLine = Instance.new("Frame")
+SwordSlashLine.Name = "SwordSlashLine"
+SwordSlashLine.Size = UDim2.new(1.5, 0, 0, 3)
+SwordSlashLine.Position = UDim2.new(-0.25, 0, 0.2, 0)
+SwordSlashLine.Rotation = -22
+SwordSlashLine.BackgroundColor3 = Color3.fromRGB(115, 215, 255)
+SwordSlashLine.BackgroundTransparency = 0.35
+SwordSlashLine.BorderSizePixel = 0
+SwordSlashLine.ZIndex = 3
+SwordSlashLine.Parent = MainFrame
+
+task.spawn(function()
+	while ScreenGui.Parent do
+		local tweenMove1 = TweenService:Create(
+			GojoSwordBg,
+			TweenInfo.new(2.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+			{
+				Position = UDim2.new(-0.04, 0, -0.13, 0),
+				Rotation = 1.6,
+				ImageTransparency = 0.42
+			}
+		)
+		local tweenSlash1 = TweenService:Create(
+			SwordSlashLine,
+			TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+			{
+				Position = UDim2.new(-0.25, 0, 0.82, 0),
+				BackgroundTransparency = 0.72
+			}
+		)
+		tweenMove1:Play()
+		tweenSlash1:Play()
+		tweenMove1.Completed:Wait()
+
+		local tweenMove2 = TweenService:Create(
+			GojoSwordBg,
+			TweenInfo.new(2.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+			{
+				Position = UDim2.new(-0.12, 0, -0.05, 0),
+				Rotation = -1.6,
+				ImageTransparency = 0.56
+			}
+		)
+		local tweenSlash2 = TweenService:Create(
+			SwordSlashLine,
+			TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+			{
+				Position = UDim2.new(-0.25, 0, 0.18, 0),
+				BackgroundTransparency = 0.35
+			}
+		)
+		tweenMove2:Play()
+		tweenSlash2:Play()
+		tweenMove2.Completed:Wait()
+	end
+end)
+
+-- ==========================================
+-- 2. HIASAN HEADER & FOOTER LIMZX HUB
+-- ==========================================
+local TopDecor = Instance.new("TextLabel")
+TopDecor.Name = "TopDecor"
+TopDecor.Size = UDim2.new(1, -16, 0, 16)
+TopDecor.Position = UDim2.new(0, 8, 0, 3)
+TopDecor.BackgroundTransparency = 1
+TopDecor.Text = "╔══════════[ ⚔️ LIMZX HUB • GOJO EDITION 🥚 ]══════════╗"
+TopDecor.TextColor3 = Color3.fromRGB(220, 140, 255)
+TopDecor.Font = Enum.Font.Code
+TopDecor.TextScaled = true
+TopDecor.ZIndex = 4
+TopDecor.Parent = MainFrame
+
+local BottomDecor = Instance.new("TextLabel")
+BottomDecor.Name = "BottomDecor"
+BottomDecor.Size = UDim2.new(1, -16, 0, 16)
+BottomDecor.Position = UDim2.new(0, 8, 1, -19)
+BottomDecor.BackgroundTransparency = 1
+BottomDecor.Text = "╚══════════[ BY LIMZX HUB • BREAK & STEAL EGG ]══════════╝"
+BottomDecor.TextColor3 = Color3.fromRGB(150, 215, 255)
+BottomDecor.Font = Enum.Font.Code
+BottomDecor.TextScaled = true
+BottomDecor.ZIndex = 4
+BottomDecor.Parent = MainFrame
+
+-- ==========================================
+-- 3. TOP BAR & TOMBOL X CLOSE (TOUCH FRIENDLY)
+-- ==========================================
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1, -20, 0, 40)
+TopBar.Position = UDim2.new(0, 10, 0, 21)
+TopBar.BackgroundColor3 = Color3.fromRGB(27, 22, 43)
+TopBar.BackgroundTransparency = 0.12
+TopBar.BorderSizePixel = 0
+TopBar.Active = true
+TopBar.ZIndex = 5
+TopBar.Parent = MainFrame
+
+local TopBarCorner = Instance.new("UICorner")
+TopBarCorner.CornerRadius = UDim.new(0, 8)
+TopBarCorner.Parent = TopBar
+
+makeDraggable(MainFrame, TopBar)
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(1, -54, 1, 0)
+TitleLabel.Position = UDim2.new(0, 12, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "✦ LIMZX HUB • BREAK & STEAL EGG ✦"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 14
+TitleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.ZIndex = 6
+TitleLabel.Parent = TopBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0, 34, 0, 34)
+CloseBtn.Position = UDim2.new(1, -37, 0.5, -17)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(225, 55, 90)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 16
+CloseBtn.ZIndex = 6
+CloseBtn.Parent = TopBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 8)
+CloseCorner.Parent = CloseBtn
+
+-- ==========================================
+-- 4. MINI BUTTON BULAT LIMZX HUB (58x58 TOUCH)
+-- ==========================================
+local MiniButton = Instance.new("TextButton")
+MiniButton.Name = "MiniButton"
+MiniButton.Size = UDim2.new(0, 58, 0, 58)
+MiniButton.Position = UDim2.new(0, 20, 0, 90)
+MiniButton.BackgroundColor3 = Color3.fromRGB(22, 16, 40)
+MiniButton.Text = "⚔️\nLIMZX"
+MiniButton.TextColor3 = Color3.fromRGB(225, 130, 255)
+MiniButton.Font = Enum.Font.GothamBold
+MiniButton.TextSize = 13
+MiniButton.Visible = false
+MiniButton.Active = true
+MiniButton.ZIndex = 10
+MiniButton.Parent = ScreenGui
+
+local MiniCorner = Instance.new("UICorner")
+MiniCorner.CornerRadius = UDim.new(1, 0)
+MiniCorner.Parent = MiniButton
+
+local MiniStroke = Instance.new("UIStroke")
+MiniStroke.Color = Color3.fromRGB(125, 210, 255)
+MiniStroke.Thickness = 2
+MiniStroke.Parent = MiniButton
+
+makeDraggable(MiniButton)
+
+CloseBtn.MouseButton1Click:Connect(function()
+	MainFrame.Visible = false
+	MiniButton.Visible = true
+	clampFrameToScreen(MiniButton)
+end)
+
+MiniButton.MouseButton1Click:Connect(function()
+	MiniButton.Visible = false
+	MainFrame.Visible = true
+	clampFrameToScreen(MainFrame)
+end)
+
+-- ==========================================
+-- 5. AREA KONTEN & PANEL TABS RESPONSIF
+-- ==========================================
+local ContentScroll = Instance.new("ScrollingFrame")
+ContentScroll.Name = "ContentScroll"
+ContentScroll.BackgroundColor3 = Color3.fromRGB(20, 16, 34)
+ContentScroll.BackgroundTransparency = 0.25
+ContentScroll.BorderSizePixel = 0
+ContentScroll.ScrollBarThickness = 5
+ContentScroll.ScrollBarImageColor3 = Color3.fromRGB(190, 75, 255)
+ContentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ContentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ContentScroll.ZIndex = 5
+ContentScroll.Parent = MainFrame
+
+local ContentCorner = Instance.new("UICorner")
+ContentCorner.CornerRadius = UDim.new(0, 8)
+ContentCorner.Parent = ContentScroll
+
+local ContentLayout = Instance.new("UIListLayout")
+ContentLayout.Padding = UDim.new(0, 8)
+ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ContentLayout.Parent = ContentScroll
+
+local ContentPadding = Instance.new("UIPadding")
+ContentPadding.PaddingTop = UDim.new(0, 8)
+ContentPadding.PaddingBottom = UDim.new(0, 8)
+ContentPadding.PaddingLeft = UDim.new(0, 8)
+ContentPadding.PaddingRight = UDim.new(0, 10)
+ContentPadding.Parent = ContentScroll
+
+local TabsScroll = Instance.new("ScrollingFrame")
+TabsScroll.Name = "TabsScroll"
+TabsScroll.BackgroundColor3 = Color3.fromRGB(24, 19, 40)
+TabsScroll.BackgroundTransparency = 0.22
+TabsScroll.BorderSizePixel = 0
+TabsScroll.ScrollBarThickness = 4
+TabsScroll.ScrollBarImageColor3 = Color3.fromRGB(125, 210, 255)
+TabsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+TabsScroll.ZIndex = 5
+TabsScroll.Parent = MainFrame
+
+local TabsCorner = Instance.new("UICorner")
+TabsCorner.CornerRadius = UDim.new(0, 8)
+TabsCorner.Parent = TabsScroll
+
+local TabsLayout = Instance.new("UIListLayout")
+TabsLayout.Padding = UDim.new(0, 6)
+TabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TabsLayout.Parent = TabsScroll
+
+local TabsPadding = Instance.new("UIPadding")
+TabsPadding.PaddingTop = UDim.new(0, 6)
+TabsPadding.PaddingBottom = UDim.new(0, 6)
+TabsPadding.PaddingLeft = UDim.new(0, 6)
+TabsPadding.PaddingRight = UDim.new(0, 6)
+TabsPadding.Parent = TabsScroll
+
+-- ==========================================
+-- 6. LOGIKA FITUR (ANTI-AFK, FPS BOOST, FARM)
+-- ==========================================
+local State = {
+	AntiAFK = false,
+	AutoTapBreak = false,
+	AutoCollectNear = false,
+	InfJump = false,
+	NoClip = false,
+}
+
+local function safeFireTouch(part0, part1)
+	local touchFn = rawget(_G, "firetouchinterest") or (getgenv and getgenv().firetouchinterest)
+	if type(touchFn) == "function" then
+		pcall(function()
+			touchFn(part0, part1, 0)
+			touchFn(part0, part1, 1)
+		end)
+	end
+end
+
+local function safeFirePrompt(prompt)
+	local promptFn = rawget(_G, "fireproximityprompt") or (getgenv and getgenv().fireproximityprompt)
+	if type(promptFn) == "function" then
+		pcall(function()
+			promptFn(prompt)
+		end)
+	end
+end
+
+player.Idled:Connect(function()
+	if State.AntiAFK then
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
+	end
+end)
+
+task.spawn(function()
+	while ScreenGui.Parent do
+		task.wait(0.15)
+		if State.AutoTapBreak then
+			local char = player.Character
+			local tool = char and char:FindFirstChildOfClass("Tool")
+			if tool then
+				pcall(function()
+					tool:Activate()
+				end)
+			end
+		end
+	end
+end)
+
+task.spawn(function()
+	while ScreenGui.Parent do
+		task.wait(0.25)
+		if State.AutoCollectNear then
+			local char = player.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if root then
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if obj:IsA("BasePart") then
+						local lowerName = string.lower(obj.Name)
+						if string.find(lowerName, "egg") or string.find(lowerName, "drop") or string.find(lowerName, "reward") then
+							if (obj.Position - root.Position).Magnitude <= 35 then
+								safeFireTouch(root, obj)
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+	if State.InfJump then
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			pcall(function()
+				hum:ChangeState(Enum.HumanoidStateType.Jumping)
+			end)
+		end
+	end
+end)
+
+RunService.Stepped:Connect(function()
+	if State.NoClip and player.Character then
+		for _, part in ipairs(player.Character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
+end)
+
+local function applyFPSBoost()
+	pcall(function()
+		settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+	end)
+	pcall(function()
+		Lighting.GlobalShadows = false
+		Lighting.FogEnd = 9e9
+	end)
+	for _, effect in ipairs(Lighting:GetChildren()) do
+		if effect:IsA("PostEffect") then
+			pcall(function()
+				effect.Enabled = false
+			end)
+		end
+	end
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			pcall(function()
+				obj.Material = Enum.Material.SmoothPlastic
+				obj.Reflectance = 0
+			end)
+		elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Fire") or obj:IsA("Smoke") then
+			pcall(function()
+				obj.Enabled = false
+			end)
+		end
+	end
+end
+
+local function triggerAllPrompts()
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	for _, prompt in ipairs(workspace:GetDescendants()) do
+		if prompt:IsA("ProximityPrompt") then
+			local part = prompt.Parent
+			if part and part:IsA("BasePart") and (part.Position - root.Position).Magnitude <= 40 then
+				safeFirePrompt(prompt)
+			end
+		end
+	end
+end
+
+local function findNearestTarget(keyword)
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local closestPart, closestDist = nil, math.huge
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and string.find(string.lower(obj.Name), string.lower(keyword)) then
+			local dist = (obj.Position - root.Position).Magnitude
+			if dist < closestDist then
+				closestDist = dist
+				closestPart = obj
+			end
+		end
+	end
+	if closestPart then
+		pcall(function()
+			root.CFrame = closestPart.CFrame + Vector3.new(0, 4, 0)
+		end)
+	end
+end
+
+-- ==========================================
+-- 7. DAFTAR TAB & TOMBOL TOUCH-FRIENDLY
+-- ==========================================
+local TabData = {
+	["Main"] = {
+		{Type = "Toggle", Name = "Anti-AFK (Anti Kick)", Key = "AntiAFK"},
+		{Type = "Toggle", Name = "Auto Swing / Break Tool", Key = "AutoTapBreak"},
+		{Type = "Toggle", Name = "Auto Collect Egg/Drop", Key = "AutoCollectNear"},
+		{Type = "Button", Name = "Instant Interact (Prompt)", Func = triggerAllPrompts},
+		{Type = "Button", Name = "FPS Boost (Anti Lag)", Func = applyFPSBoost},
+	},
+	["Egg & Event"] = {
+		{Type = "Button", Name = "TP ke Egg Terdekat", Func = function() findNearestTarget("egg") end},
+		{Type = "Button", Name = "TP ke Event / Drop", Func = function() findNearestTarget("event") end},
+		{Type = "Button", Name = "TP ke Base / Safe Zone", Func = function() findNearestTarget("base") end},
+		{Type = "Button", Name = "Refresh Server / Rejoin", Func = function()
+			TeleportService:Teleport(game.PlaceId, player)
+		end},
+	},
+	["Player"] = {
+		{Type = "Button", Name = "Speed Boost (WalkSpeed 36)", Func = function()
+			local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+			if hum then hum.WalkSpeed = 36 end
+		end},
+		{Type = "Button", Name = "Normal Speed (WalkSpeed 16)", Func = function()
+			local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+			if hum then hum.WalkSpeed = 16 end
+		end},
+		{Type = "Toggle", Name = "Infinite Jump", Key = "InfJump"},
+		{Type = "Toggle", Name = "NoClip (Tembus)", Key = "NoClip"},
+		{Type = "Button", Name = "Respawn Karakter", Func = function()
+			if player.Character then player.Character:BreakJoints() end
+		end},
+	},
+	["Server"] = {
+		{Type = "Button", Name = "Server Hop (Server Baru)", Func = function()
+			TeleportService:Teleport(game.PlaceId, player)
+		end},
+		{Type = "Button", Name = "Fullbright (Terang)", Func = function()
+			Lighting.Brightness = 3
+			Lighting.ClockTime = 14
+		end},
+		{Type = "Button", Name = "Hapus Kabut (No Fog)", Func = function()
+			Lighting.FogEnd = 100000
+		end},
+	},
+	["Limzx Info"] = {
+		{Type = "Button", Name = "╔══[ BY LIMZX HUB ]══╗", Func = function() end},
+		{Type = "Button", Name = "Game: Break & Steal Egg", Func = function() end},
+		{Type = "Button", Name = "UI: Auto Portrait/Landscape", Func = function() end},
+	}
+}
+
+local TabOrder = {"Main", "Egg & Event", "Player", "Server", "Limzx Info"}
+local TabButtons = {}
+
+local function loadTabContent(tabName)
+	for _, child in ipairs(ContentScroll:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+	ContentScroll.CanvasPosition = Vector2.new(0, 0)
+
+	local items = TabData[tabName] or {}
+	for _, item in ipairs(items) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, 0, 0, 42) -- Tinggi 42px agar mudah ditekan jempol
+		btn.TextXAlignment = Enum.TextXAlignment.Left
+		btn.Font = Enum.Font.GothamSemibold
+		btn.TextSize = 14
+		btn.TextTruncate = Enum.TextTruncate.AtEnd
+		btn.BackgroundTransparency = 0.1
+		btn.ZIndex = 6
+		btn.Parent = ContentScroll
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = btn
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(135, 75, 200)
+		stroke.Thickness = 1
+		stroke.Parent = btn
+
+		if item.Type == "Toggle" and item.Key then
+			local function refreshToggleVisual()
+				local active = State[item.Key]
+				btn.BackgroundColor3 = active and Color3.fromRGB(145, 45, 215) or Color3.fromRGB(34, 28, 54)
+				btn.TextColor3 = active and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(220, 215, 235)
+				btn.Text = string.format("  ⚔️ %s [%s]", item.Name, active and "ON" or "OFF")
+			end
+
+			refreshToggleVisual()
+
+			btn.MouseButton1Click:Connect(function()
+				State[item.Key] = not State[item.Key]
+				refreshToggleVisual()
+			end)
+		else
+			btn.BackgroundColor3 = Color3.fromRGB(34, 28, 54)
+			btn.TextColor3 = Color3.fromRGB(240, 240, 250)
+			btn.Text = "  ⚔️ " .. item.Name
+
+			btn.MouseButton1Click:Connect(function()
+				btn.BackgroundColor3 = Color3.fromRGB(190, 75, 255)
+				task.wait(0.12)
+				btn.BackgroundColor3 = Color3.fromRGB(34, 28, 54)
+				if item.Func then
+					item.Func()
+				end
+			end)
+		end
+	end
+end
+
+for _, tabName in ipairs(TabOrder) do
+	local tabBtn = Instance.new("TextButton")
+	tabBtn.Name = tabName .. "Tab"
+	tabBtn.Size = UDim2.new(1, 0, 0, 38)
+	tabBtn.BackgroundColor3 = Color3.fromRGB(36, 30, 58)
+	tabBtn.BackgroundTransparency = 0.1
+	tabBtn.Text = tabName
+	tabBtn.TextColor3 = Color3.fromRGB(205, 195, 225)
+	tabBtn.Font = Enum.Font.GothamBold
+	tabBtn.TextSize = 13
+	tabBtn.ZIndex = 6
+	tabBtn.Parent = TabsScroll
+
+	local tCorner = Instance.new("UICorner")
+	tCorner.CornerRadius = UDim.new(0, 8)
+	tCorner.Parent = tabBtn
+
+	TabButtons[tabName] = tabBtn
+
+	tabBtn.MouseButton1Click:Connect(function()
+		for name, b in pairs(TabButtons) do
+			if name == tabName then
+				b.BackgroundColor3 = Color3.fromRGB(180, 65, 245)
+				b.TextColor3 = Color3.fromRGB(255, 255, 255)
+			else
+				b.BackgroundColor3 = Color3.fromRGB(36, 30, 58)
+				b.TextColor3 = Color3.fromRGB(205, 195, 225)
+			end
+		end
+		loadTabContent(tabName)
+	end)
+end
+
+-- ==========================================
+-- 8. AUTO RESIZE PORTRAIT & LANDSCAPE HP
+-- ==========================================
+local isFirstLayout = true
+
+local function updateResponsiveLayout()
+	local vp = getViewportSize()
+	local isPortrait = vp.Y >= vp.X
+
+	if isPortrait then
+		-- Mode HP Portrait: Lebar 90% layar, Tinggi 56% layar, Tab di atas (horizontal)
+		local frameW = math.clamp(math.floor(vp.X * 0.90), 290, 440)
+		local frameH = math.clamp(math.floor(vp.Y * 0.56), 340, 480)
+		MainFrame.Size = UDim2.new(0, frameW, 0, frameH)
+
+		TabsScroll.Position = UDim2.new(0, 10, 0, 66)
+		TabsScroll.Size = UDim2.new(1, -20, 0, 50)
+		TabsScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
+		TabsScroll.ScrollingDirection = Enum.ScrollingDirection.X
+		TabsLayout.FillDirection = Enum.FillDirection.Horizontal
+
+		for _, tabBtn in pairs(TabButtons) do
+			tabBtn.Size = UDim2.new(0, 105, 1, 0)
+		end
+
+		ContentScroll.Position = UDim2.new(0, 10, 0, 122)
+		ContentScroll.Size = UDim2.new(1, -20, 1, -145)
+	else
+		-- Mode HP Landscape / Tablet / PC: Tab di kanan (vertikal), Konten di kiri
+		local frameW = math.clamp(math.floor(vp.X * 0.68), 420, 540)
+		local frameH = math.clamp(math.floor(vp.Y * 0.78), 260, 340)
+		MainFrame.Size = UDim2.new(0, frameW, 0, frameH)
+
+		local tabW = math.clamp(math.floor(frameW * 0.27), 115, 145)
+		TabsScroll.Position = UDim2.new(1, -(tabW + 10), 0, 66)
+		TabsScroll.Size = UDim2.new(0, tabW, 1, -89)
+		TabsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		TabsScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+		TabsLayout.FillDirection = Enum.FillDirection.Vertical
+
+		for _, tabBtn in pairs(TabButtons) do
+			tabBtn.Size = UDim2.new(1, 0, 0, 38)
+		end
+
+		ContentScroll.Position = UDim2.new(0, 10, 0, 66)
+		ContentScroll.Size = UDim2.new(1, -(tabW + 26), 1, -89)
+	end
+
+	if isFirstLayout then
+		isFirstLayout = false
+		MainFrame.Position = UDim2.new(
+			0, math.floor((vp.X - MainFrame.Size.X.Offset) / 2),
+			0, math.floor((vp.Y - MainFrame.Size.Y.Offset) / 2)
+		)
+	else
+		clampFrameToScreen(MainFrame)
+		clampFrameToScreen(MiniButton)
+	end
+end
+
+updateResponsiveLayout()
+
+local function bindCameraResize()
+	local cam = workspace.CurrentCamera
+	if cam then
+		cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveLayout)
+	end
+end
+
+bindCameraResize()
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCameraResize)
+
+TabButtons["Main"].BackgroundColor3 = Color3.fromRGB(180, 65, 245)
+TabButtons["Main"].TextColor3 = Color3.fromRGB(255, 255, 255)
+loadTabContent("Main")
